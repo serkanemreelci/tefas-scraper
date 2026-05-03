@@ -1,74 +1,49 @@
 const express = require("express");
-const puppeteer = require("puppeteer");
 const cors = require("cors");
 
 const app = express();
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("TEFAS scraper is running");
+  res.send("TEFAS API proxy is running");
 });
 
 app.get("/fund/:code", async (req, res) => {
   const fundCode = req.params.code.toUpperCase();
-  let browser;
 
   try {
-    browser = await puppeteer.launch({
-      headless: "new",
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-software-rasterizer",
-        "--disable-extensions"
-      ]
+    const response = await fetch("https://www.tefas.gov.tr/api/funds/fonFiyatBilgiGetir", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      },
+      body: JSON.stringify({
+        fonKodu: fundCode,
+        dil: "TR",
+        periyod: 12
+      })
     });
 
-    const page = await browser.newPage();
+    const data = await response.json();
+    const list = data.resultList || [];
 
-    const url = `https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod=${fundCode}`;
+    if (!list.length) {
+      return res.status(404).json({
+        fundCode,
+        error: true,
+        message: "No price data found"
+      });
+    }
 
-    await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: 60000
-    });
-
-    await new Promise(resolve => setTimeout(resolve, 7000));
-
-    const result = await page.evaluate(() => {
-      const text = document.body.innerText;
-      const lines = text
-        .split("\n")
-        .map(x => x.trim())
-        .filter(Boolean);
-
-      let lastPrice = null;
-
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes("Son Fiyat")) {
-          for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
-            if (/^[0-9.,]+$/.test(lines[j])) {
-              lastPrice = lines[j];
-              break;
-            }
-          }
-        }
-
-        if (lastPrice) break;
-      }
-
-      return {
-        lastPrice,
-        sampleText: lines.slice(0, 80)
-      };
-    });
+    const latest = list[list.length - 1];
 
     res.json({
       fundCode,
-      lastPrice: result.lastPrice,
-      debug: result.sampleText
+      fundName: latest.fonUnvan,
+      date: latest.tarih,
+      lastPrice: latest.fiyat
     });
 
   } catch (err) {
@@ -76,11 +51,6 @@ app.get("/fund/:code", async (req, res) => {
       error: true,
       message: err.message
     });
-
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
   }
 });
 
