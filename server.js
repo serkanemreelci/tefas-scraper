@@ -32,36 +32,46 @@ app.get("/fund/:code", async (req, res) => {
 
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 45000
+      timeout: 60000
     });
 
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 7000));
 
     const result = await page.evaluate(() => {
-      const elements = Array.from(document.querySelectorAll("div, p, span"));
+      const text = document.body.innerText;
+      const lines = text
+        .split("\n")
+        .map(x => x.trim())
+        .filter(Boolean);
 
       let lastPrice = null;
 
-      for (let i = 0; i < elements.length; i++) {
-        const text = elements[i].innerText?.trim();
-
-        if (text === "Son Fiyat (TL)") {
-          lastPrice = elements[i + 1]?.innerText?.trim();
-          break;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes("Son Fiyat")) {
+          for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+            if (/^[0-9.,]+$/.test(lines[j])) {
+              lastPrice = lines[j];
+              break;
+            }
+          }
         }
+
+        if (lastPrice) break;
       }
 
-      return { lastPrice };
+      return {
+        lastPrice,
+        sampleText: lines.slice(0, 80)
+      };
     });
 
     res.json({
       fundCode,
-      lastPrice: result.lastPrice
+      lastPrice: result.lastPrice,
+      debug: result.sampleText
     });
 
   } catch (err) {
-    console.error("SCRAPER ERROR:", err);
-
     res.status(500).json({
       error: true,
       message: err.message
