@@ -15,14 +15,14 @@ app.get("/fund/:code", async (req, res) => {
 
   try {
     browser = await puppeteer.launch({
-      headless: true,
+      headless: "new",
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
-        "--single-process",
-        "--no-zygote"
+        "--disable-software-rasterizer",
+        "--disable-extensions"
       ]
     });
 
